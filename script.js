@@ -75,17 +75,17 @@ function setupDeviceRadios(){
 			return false;
 		}
 		
-		var platforms = WebCL.getPlatformIDs ();
+		var platforms = webcl.getPlatforms ();
 		for (var i in platforms) {
 			var plat = platforms[i];
-			var platformName = plat.getPlatformInfo (WebCL.CL_PLATFORM_NAME);
+			var platformName = plat.getInfo (WebCL.PLATFORM_NAME);
 			deviceRadioStr += "<tr>" +
 							"<td colspan='3' class='adjustTable'><b>"+ i +".&nbsp;"+ platformName + "</b></td>" +
 							"</tr>";		
-			var devices = plat.getDeviceIDs (WebCL.CL_DEVICE_TYPE_ALL);
+			var devices = plat.getDevices (WebCL.DEVICE_TYPE_ALL);
 			for (var j in devices) {
 				var dev = devices[j];
-				var deviceName = dev.getDeviceInfo(WebCL.CL_DEVICE_NAME);
+				var deviceName = dev.getInfo(WebCL.DEVICE_NAME);
 				deviceRadioStr += "<tr>" +
 								"<td class='adjustTable' width='2'><img src='Graphics/spacer.png' width='2' height='1'></td>" +								
 								"<td class='adjustTable'><input type='radio' value='"+ i + "_" + j +"' name='device' id='device"+ i + "_" + j +"'></td>" +
@@ -137,7 +137,7 @@ function setImagesToCanvas(img, canName){
 }
 
 function checkWebCL(){
-	if (window.WebCL == undefined) {
+	if (window.webcl == undefined) {
 		alert("Unfortunately your system does not support WebCL. " +
 				"Make sure that you have both the OpenCL driver " +
 				"and the WebCL browser extension installed.");
@@ -149,13 +149,13 @@ function checkWebCL(){
 function getDeviceType(dev){
 	var retStr = "";
 	switch(dev){
-		case WebCL.CL_DEVICE_TYPE_CPU:
+		case WebCL.DEVICE_TYPE_CPU:
 			retStr = "CPU";
 			break;
-		case WebCL.CL_DEVICE_TYPE_GPU:
+		case WebCL.DEVICE_TYPE_GPU:
 			retStr = "GPU";
 			break;
-		case WebCL.CL_DEVICE_TYPE_ACCELERATOR:
+		case WebCL.DEVICE_TYPE_ACCELERATOR:
 			retStr = "APU";
 			break;
 		default:
@@ -620,9 +620,9 @@ function CL_ratrace (loadPrims) {
 		}else{	
                  
 			// Setup WebCL context using the default device of the first available platform
-			var platforms = WebCL.getPlatformIDs();
-			//var ctx = WebCL.createContextFromType ([WebCL.CL_CONTEXT_PLATFORM, platforms[platformChosen]], WebCL.CL_DEVICE_TYPE_DEFAULT);
-			var ctx = WebCL.createContextFromType ([WebCL.CL_CONTEXT_PLATFORM, platforms[platformChosen]], WebCL.CL_DEVICE_TYPE_ALL);
+			var platforms = webcl.getPlatforms();
+			//var ctx = WebCL.createContextFromType ([WebCL.CONTEXT_PLATFORM, platforms[platformChosen]], WebCL.DEVICE_TYPE_DEFAULT);
+			var ctx = webcl.createContext({ platform: platformChosen, deviceType: WebCL.DEVICE_TYPE_DEFAULT });
 			// Setup buffers
 			var imgSize = screenWidth * screenHeight;
 			outputStr += "Image size: " + imgSize + " pixels ("	+ screenWidth + " x " + screenHeight + ")";
@@ -654,42 +654,41 @@ function CL_ratrace (loadPrims) {
 			
 			outputStr += "\nBuffer size: " + bufSizeImage + " bytes";
 					 
-			var bufIn = ctx.createBuffer (WebCL.CL_MEM_READ_ONLY, bufSizeImage);
-			var bufOut = ctx.createBuffer (WebCL.CL_MEM_WRITE_ONLY, bufSizeImage);
-			var bufGlobalPrims = ctx.createBuffer (WebCL.CL_MEM_READ_ONLY, bufSizeGlobalPrims);
-			//var bufLocalPrims = ctx.createBuffer (WebCL.CL_MEM_READ_WRITE, bufSizeGlobalPrims);
+			var bufIn = ctx.createBuffer (WebCL.MEM_READ_ONLY, bufSizeImage);
+			var bufOut = ctx.createBuffer (WebCL.MEM_WRITE_ONLY, bufSizeImage);
+			var bufGlobalPrims = ctx.createBuffer (WebCL.MEM_READ_ONLY, bufSizeGlobalPrims);
 			// Create and build program
 			var kernelSrc = loadKernel("clProgramRaytrace");
-			var program = ctx.createProgramWithSource(kernelSrc);
-			var devices = ctx.getContextInfo(WebCL.CL_CONTEXT_DEVICES);
+			var program = ctx.createProgram(kernelSrc);
+			var devices = ctx.getInfo(WebCL.CONTEXT_DEVICES);
 			try {
-				program.buildProgram ([devices[deviceChosen]], builtInFuncStr);
+				program.build ([devices[deviceChosen]], builtInFuncStr);
 			} catch(e) {
 				alert ("Failed to build WebCL program. Error "
-						+ program.getProgramBuildInfo (devices[deviceChosen], WebCL.CL_PROGRAM_BUILD_STATUS)
-						+ ":  " + program.getProgramBuildInfo (devices[deviceChosen], WebCL.CL_PROGRAM_BUILD_LOG));
+						+ program.getBuildInfo (devices[deviceChosen], WebCL.PROGRAM_BUILD_STATUS)
+						+ ":  " + program.getBuildInfo (devices[deviceChosen], WebCL.PROGRAM_BUILD_LOG));
 				throw e;
 			}
 			// Create kernel and set arguments
 			var kernel = program.createKernel ("raytracer_kernel");
-			kernel.setKernelArg (0, bufIn);
-			kernel.setKernelArg (1, bufOut);
-			kernel.setKernelArg (2, screenWidth, WebCL.types.UINT);
-			kernel.setKernelArg (3, screenHeight, WebCL.types.UINT);
-			kernel.setKernelArg (4, parseFloat(camera_x), WebCL.types.FLOAT);
-			kernel.setKernelArg (5, parseFloat(camera_y), WebCL.types.FLOAT);
-			kernel.setKernelArg (6, parseFloat(camera_z), WebCL.types.FLOAT);
-			kernel.setKernelArg (7, parseFloat(viewport_x), WebCL.types.FLOAT);
-			kernel.setKernelArg (8, parseFloat(viewport_y), WebCL.types.FLOAT);
-			kernel.setKernelArg (9, bufGlobalPrims);			
-			kernel.setKernelArg (10, n_primitives, WebCL.types.INT);
-			kernel.setKernelArgLocal (11, bufSizeGlobalPrims);	// requires the size for the local buffer ?	! ?	
+			kernel.setArg (0, bufIn);
+			kernel.setArg (1, bufOut);
+			kernel.setArg (2, ui32(screenWidth));
+			kernel.setArg (3, ui32(screenHeight));
+			kernel.setArg (4, f32(parseFloat(camera_x)));
+			kernel.setArg (5, f32(parseFloat(camera_y)));
+			kernel.setArg (6, f32(parseFloat(camera_z)));
+			kernel.setArg (7, f32(parseFloat(viewport_x)));
+			kernel.setArg (8, f32(parseFloat(viewport_y)));
+			kernel.setArg (9, bufGlobalPrims);			
+			kernel.setArg (10, i32(n_primitives));
+			kernel.setArg (11, ui32(bufSizeGlobalPrims)); // local memory buffer size
 			// Create command queue using the first available device
 			var cmdQueue = ctx.createCommandQueue (devices[deviceChosen], 0);
 			// Write the buffer to OpenCL device memory
-			cmdQueue.enqueueWriteBuffer (bufIn, false, 0, bufSizeImage, pixels.data, []);
+			cmdQueue.enqueueWriteBuffer (bufIn, false, 0, bufSizeImage, pixels.data);
 			// added
-			cmdQueue.enqueueWriteBuffer (bufGlobalPrims, false, 0, bufSizeGlobalPrims, prim_list_float32View, []);
+			cmdQueue.enqueueWriteBuffer (bufGlobalPrims, false, 0, bufSizeGlobalPrims, prim_list_float32View);
 			// Init ND-range 
 			var localWS = [workItemSize[0],workItemSize[1]];  
 			var globalWS = [Math.ceil (screenWidth / localWS[0]) * localWS[0], 
@@ -703,26 +702,26 @@ function CL_ratrace (loadPrims) {
 				
 			var dev = devices[deviceChosen];
 			var platName = "Platform: " +
-							dev.getDeviceInfo(WebCL.CL_DEVICE_PLATFORM).getPlatformInfo(WebCL.CL_PLATFORM_NAME);			
+							dev.getInfo(WebCL.DEVICE_PLATFORM).getInfo(WebCL.PLATFORM_NAME);			
 			platName = platName.replace(/ +/g, " ");
-			var devName = "Device: " + dev.getDeviceInfo(WebCL.CL_DEVICE_NAME);			
+			var devName = "Device: " + dev.getInfo(WebCL.DEVICE_NAME);			
 			devName = devName.replace(/ +/g, " ");			
 			
 			outputStr =  "Scene File: " + sceneFileName + "\n" + platName + "\n" + devName + "\n" + 
-				"Device Type: " + getDeviceType(dev.getDeviceInfo(WebCL.CL_DEVICE_TYPE)) + "\n\n" +
-				"Max Work Group Size: " + dev.getDeviceInfo(WebCL.CL_DEVICE_MAX_WORK_GROUP_SIZE) + "\n" +
-				"Compute Units: " + dev.getDeviceInfo(WebCL.CL_DEVICE_MAX_COMPUTE_UNITS) + "\n" +
-				"Global Mem Size: " + ((dev.getDeviceInfo(WebCL.CL_DEVICE_GLOBAL_MEM_SIZE)/1024)/1024) + " MB\n" +
-				"Local Mem Size: " + (dev.getDeviceInfo(WebCL.CL_DEVICE_LOCAL_MEM_SIZE)/1024) + " KB\n\n" +
+				"Device Type: " + getDeviceType(dev.getInfo(WebCL.DEVICE_TYPE)) + "\n\n" +
+				"Max Work Group Size: " + dev.getInfo(WebCL.DEVICE_MAX_WORK_GROUP_SIZE) + "\n" +
+				"Compute Units: " + dev.getInfo(WebCL.DEVICE_MAX_COMPUTE_UNITS) + "\n" +
+				"Global Mem Size: " + ((dev.getInfo(WebCL.DEVICE_GLOBAL_MEM_SIZE)/1024)/1024) + " MB\n" +
+				"Local Mem Size: " + (dev.getInfo(WebCL.DEVICE_LOCAL_MEM_SIZE)/1024) + " KB\n\n" +
 				outputStr;		
 					 
 			var startTime = Date.now();
 			// Execute (enqueue) kernel
 			for(var i = 0; i < runCount; i++){
-				cmdQueue.enqueueNDRangeKernel(kernel, globalWS.length, [], globalWS, localWS, []);
+				cmdQueue.enqueueNDRangeKernel(kernel, 2, null, globalWS, localWS);
 			}
 			// Read the result buffer from OpenCL device
-			cmdQueue.enqueueReadBuffer (bufOut, false, 0, bufSizeImage, pixels.data, []);
+			cmdQueue.enqueueReadBuffer (bufOut, false, 0, bufSizeImage, pixels.data);
 			cmdQueue.finish (); //Finish all the operations
 			var endTime = Date.now();
 			var runTime = (endTime - startTime)/1000;
@@ -738,4 +737,23 @@ function CL_ratrace (loadPrims) {
 		document.getElementById("output").innerHTML += "<h3>ERROR:</h3><pre style=\"color:red;\">" + e.message + "</pre>";
 		throw e;
 	}
+}
+
+var f32arr = new Float32Array(1);
+var i32arr = new Int32Array(1);
+var ui32arr = new Uint32Array(1);
+
+function f32(value) {
+  f32arr[0] = value;
+  return f32arr;
+}
+
+function i32(value) {
+  i32arr[0] = value;
+  return i32arr;
+}
+
+function ui32(value) {
+  ui32arr[0] = value;
+  return ui32arr;
 }
